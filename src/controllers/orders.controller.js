@@ -307,4 +307,76 @@ async function getOrder(req, res, next) {
   }
 }
 
-module.exports = { createOrder, getOrder };
+// ── PATCH /api/v1/orders/:id/status ──────────────────────────────────────────
+const ALLOWED_TRANSITIONS = {
+  pending:   ['confirmed', 'cancelled'],
+  confirmed: ['preparing', 'cancelled'],
+  preparing: ['ready',     'cancelled'],
+  ready:     ['served',    'cancelled'],
+  served:    [],
+  cancelled: [],
+};
+
+async function updateOrderStatus(req, res, next) {
+  const orderId = parseInt(req.params.id, 10);
+  const { status: newStatus } = req.body;
+
+  if (isNaN(orderId)) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'INVALID_PARAM', message: 'Order ID must be a number' },
+    });
+  }
+
+  if (!newStatus) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'INVALID_BODY', message: 'status field is required' },
+    });
+  }
+
+  try {
+    const orderResult = await pool.query(
+      'SELECT id, status FROM orders WHERE id = $1',
+      [orderId]
+    );
+
+    if (orderResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: `Order ${orderId} not found` },
+      });
+    }
+
+    const currentStatus = orderResult.rows[0].status;
+    const allowed = ALLOWED_TRANSITIONS[currentStatus] || [];
+
+    if (!allowed.includes(newStatus)) {
+      return res.status(422).json({
+        success: false,
+        error: {
+          code: 'INVALID_STATUS_TRANSITION',
+          message: `Cannot change status from '${currentStatus}' to '${newStatus}'. Allowed: ${allowed.length ? allowed.join(', ') : 'none'}`,
+        },
+      });
+    }
+
+    const updated = await pool.query(
+      `UPDATE orders
+       SET status = $1, updated_at = NOW()
+       WHERE id = $2
+       RETURNING id, table_id, status, total_price, updated_at`,
+      [newStatus, orderId]
+    );
+
+    res.json({
+      success: true,
+      message: `Order status updated to '${newStatus}'`,
+      data: updated.rows[0],
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { createOrder, getOrder, updateOrderStatus };

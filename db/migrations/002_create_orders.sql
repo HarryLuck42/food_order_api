@@ -3,7 +3,7 @@ CREATE TYPE order_status AS ENUM (
     'confirmed',
     'preparing',
     'ready',
-    'completed',
+    'served',
     'cancelled'
 );
 

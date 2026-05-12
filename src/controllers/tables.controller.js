@@ -25,7 +25,7 @@ async function getTableStatus(req, res, next) {
       `SELECT id, status, total_price, created_at
        FROM orders
        WHERE table_id = $1
-         AND status NOT IN ('completed', 'cancelled')
+         AND status NOT IN ('served', 'cancelled')
        ORDER BY created_at DESC`,
       [id]
     );
